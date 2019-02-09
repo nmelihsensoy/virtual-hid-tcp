@@ -5,6 +5,7 @@ LIBS = -lm
 SRC_DIR = src/
 OBJ_DIR = build/
 BIN_DIR = bin/
+DIRS=$(OBJ_DIR) $(BIN_DIR)
 
 APP_NAME = server
 
@@ -20,3 +21,4 @@ clean:
 install:
 	cp $(BIN_DIR)$(APP_NAME) /usr/bin
 
+$(shell mkdir -p $(DIRS))
