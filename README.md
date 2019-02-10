@@ -32,7 +32,7 @@ make
 ./client --help
 ```
 
-### Key Press
+#### Key Press
 
 115 -> Volume Up // 114 -> Volume Down
 
@@ -40,9 +40,17 @@ make
 ./client -k 115
 ```
 
+#### Mouse Pointer
+
+-m X Y
+
+```c
+./client -m 50 50 //
+```
+
 ### Python Client
 
-### Key Press
+#### Key Press
 
 115 -> Volume Up // 114 -> Volume Down
 

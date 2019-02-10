@@ -19,7 +19,6 @@
 #include <netinet/in.h> //htons, sockaddr_in
 #include <string.h> //memset, strcpy, strlen
 #include <fcntl.h> //open
-#include <math.h> //pow
 #include <stdlib.h> //exit
 #include <sys/socket.h>
 #include <linux/uinput.h>
@@ -54,19 +53,6 @@ void emit(int fd, int type, int code, int val){
     write(fd, &ie, sizeof(ie));
 }
 
-/*
- * This function does parse integers inside char array
-*/
-int parseInt(char* arr){
-    int sum = 0;
-    int len = strlen(arr)-1;
-    for (int i = 0; i < len; i++){
-        int n = arr[len - (i+1)] - '0';
-        sum = sum + pow(10, i)*n;
-    }
-    return sum;
-}
-
 int main(){
     int fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);  
 
@@ -75,7 +61,7 @@ int main(){
     for(int i=0; i<sizeof(keys)/sizeof(int); i++){
         ioctl(fd, UI_SET_KEYBIT, keys[i]);
     }
-
+    
     //Mouse Pointer events init
     ioctl(fd, UI_SET_EVBIT, EV_REL);
     ioctl(fd, UI_SET_RELBIT, REL_X);
@@ -116,7 +102,8 @@ int main(){
         perror("listen");
         exit(EXIT_FAILURE);
     }
-    
+
+    //Loop because we want to listen client continuously 
     while(1){
         if((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen))<0){
             perror("accept");
@@ -125,31 +112,70 @@ int main(){
 
         char buffer[1024] = {0};
         valread = recv(new_socket, buffer, 1024, 0);
-        int buffer_size = strlen(buffer)-1;
-        int buffer_int = parseInt(buffer);
+        int buffer_len = strlen(buffer);
+        
+        printf("Received: %s Size: %i\n", buffer, buffer_len); //For debugging
 
-        printf("Received: %s\n", buffer); 
+        short mode = buffer[0]-'0'; //char to int
+        
+        buffer[0] = '0'; //Making buffer '0' because atoi giving wrong value
+        int incoming_code = atoi(buffer); // char* to int for mode 1 
 
         /*
-         * Example buffer: "115k" -> 115 is VOLUME_UP event code and 'k' means this is a keyboard event
+         * Mode 2 / Mouse Pointer variables
         */
-        switch (buffer[buffer_size]){
-            case 'k':     
-                emit(fd, EV_KEY, buffer_int, 1);
+        int a = 0;
+        int is_after_limiter = 0;
+        char x_coor[6];
+        char y_coor[6];
+
+        /*
+         * 1 - Keyboard
+         * 2 - Mouse Pointer
+         * 3 - Mouse Buttons
+        */
+        switch (mode){
+            case 1: 
+                emit(fd, EV_KEY, incoming_code, 1);
                 emit(fd, EV_SYN, SYN_REPORT, 0);
-                emit(fd, EV_KEY, buffer_int, 0);
+                emit(fd, EV_KEY, incoming_code, 0);
+                emit(fd, EV_SYN, SYN_REPORT, 0);
+                usleep(5);
+            break;
+            case 2:
+                //Splitting char* 2 parts by delimiter ":"           
+                for(int i = 0; i < buffer_len; i++){
+                    if(buffer[i] == ':'){
+                        is_after_limiter = 1;
+                    }
+                    
+                    if(is_after_limiter == 0){
+                        *(x_coor+i) = buffer[i];
+                    }else if(is_after_limiter == 1){
+                        *(y_coor+a)= buffer[i+1];
+                        a++;   
+                    }else{
+                        *(x_coor+i) = '\0';
+                        *(y_coor+i) = '\0';
+                    }           
+                }
+                
+                emit(fd, EV_REL, REL_X, atoi(x_coor));
+                emit(fd, EV_REL, REL_Y, atoi(y_coor));
                 emit(fd, EV_SYN, SYN_REPORT, 0);
                 usleep(5);
             break;
         }
-
         usleep(2);        
     }
-    
+
     sleep(1);
 
+    //Detach HID Device
     ioctl(fd, UI_DEV_DESTROY);
     close(fd);
+
+    //Close socket server
     close(server_fd);
    
     return 0;
