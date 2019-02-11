@@ -28,7 +28,7 @@
 struct uinput_setup usetup;
 
 //Key events must be defined in keys[] before using
-int keys[] = {BTN_LEFT, KEY_VOLUMEUP, KEY_VOLUMEDOWN}; 
+int keys[] = {BTN_LEFT, BTN_RIGHT, KEY_VOLUMEUP, KEY_VOLUMEDOWN}; 
 
 int server_fd;
 int new_socket, valread;
@@ -103,70 +103,56 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-    //Loop because we want to listen client continuously 
-    while(1){
-        if((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen))<0){
-            perror("accept");
-            exit(EXIT_FAILURE);
-        }
+    if((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen))<0){
+        perror("accept");
+        exit(EXIT_FAILURE);
+    }
 
+    while(1){    
         char buffer[1024] = {0};
         valread = recv(new_socket, buffer, 1024, 0);
-        int buffer_len = strlen(buffer);
+
+        if(valread>0){
+            int buffer_len = strlen(buffer);
         
-        printf("Received: %s Size: %i\n", buffer, buffer_len); //For debugging
+            printf("Received: %s Size: %i\n", buffer, buffer_len); //For debugging
 
-        short mode = buffer[0]-'0'; //char to int
-        
-        buffer[0] = '0'; //Making buffer '0' because atoi giving wrong value
-        int incoming_code = atoi(buffer); // char* to int for mode 1 
+            short mode = buffer[0]-'0'; //char to int
+            
+            buffer[0] = '0'; //Making buffer '0' because atoi giving wrong value
+            int incoming_code = atoi(buffer); // char* to int for mode 1 
 
-        /*
-         * Mode 2 / Mouse Pointer variables
-        */
-        int a = 0;
-        int is_after_limiter = 0;
-        char x_coor[6];
-        char y_coor[6];
-
-        /*
-         * 1 - Keyboard
-         * 2 - Mouse Pointer
-         * 3 - Mouse Buttons
-        */
-        switch (mode){
-            case 1: 
-                emit(fd, EV_KEY, incoming_code, 1);
-                emit(fd, EV_SYN, SYN_REPORT, 0);
-                emit(fd, EV_KEY, incoming_code, 0);
-                emit(fd, EV_SYN, SYN_REPORT, 0);
-                usleep(5);
-            break;
-            case 2:
-                //Splitting char* 2 parts by delimiter ":"           
-                for(int i = 0; i < buffer_len; i++){
-                    if(buffer[i] == ':'){
-                        is_after_limiter = 1;
+            /*
+            * 1 - Keyboard
+            * 2 - Mouse Pointer
+            * 3 - Mouse Buttons
+            */
+            switch (mode){
+                case 0:
+                    emit(fd, EV_SYN, SYN_REPORT, 0);
+                    usleep(5);
+                break;
+                case 1: 
+                    emit(fd, EV_KEY, incoming_code, 1);
+                    emit(fd, EV_SYN, SYN_REPORT, 0);
+                    emit(fd, EV_KEY, incoming_code, 0);
+                    emit(fd, EV_SYN, SYN_REPORT, 0);
+                    usleep(5);
+                break;
+                case 2:         
+                    if(incoming_code == 0){
+                        emit(fd, EV_REL, REL_X, 1);
+                    }else if(incoming_code == 1){
+                        emit(fd, EV_REL, REL_Y, 1);
                     }
-                    
-                    if(is_after_limiter == 0){
-                        *(x_coor+i) = buffer[i];
-                    }else if(is_after_limiter == 1){
-                        *(y_coor+a)= buffer[i+1];
-                        a++;   
-                    }else{
-                        *(x_coor+i) = '\0';
-                        *(y_coor+i) = '\0';
-                    }           
-                }
-                
-                emit(fd, EV_REL, REL_X, atoi(x_coor));
-                emit(fd, EV_REL, REL_Y, atoi(y_coor));
-                emit(fd, EV_SYN, SYN_REPORT, 0);
-                usleep(5);
-            break;
-        }
-        usleep(2);        
+                    emit(fd, EV_SYN, SYN_REPORT, 0);
+                    usleep(5);
+                break;
+            }
+            usleep(2);        
+        }else{
+            new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+        }        
     }
 
     sleep(1);

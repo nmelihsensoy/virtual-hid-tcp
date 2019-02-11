@@ -70,7 +70,7 @@ int main(int argc, char **argv){
 
 	int arg_size = strlen(argv[element+1]);
 	char *payload = malloc(arg_size);
-	int payload_size = arg_size;
+	int payload_size = arg_size+1;
 	*(payload+0) = mode; // set payloads first element as a id
 	for(int i=0; i<arg_size; i++){
 		payload[i+1] = *(argv[element+1]+i);

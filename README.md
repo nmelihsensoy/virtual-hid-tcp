@@ -45,7 +45,7 @@ make
 -m X Y
 
 ```c
-./client -m 50 50 //
+./client -m 50 50
 ```
 
 ### Python Client
