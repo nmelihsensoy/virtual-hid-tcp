@@ -7,6 +7,15 @@
  * Input Event codes can be found here
  * https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
  * 
+ * 0 - Key Report
+ * 1 - Key Press - Any device
+ * 2 - Mouse Pointer
+ * 
+ * Ex: 
+ *   Left Click Event -> 11272 -> 1:key press, 1: press val, 272: keycode
+ *   X Axis -> 20010 -> 2: pointer, 0: x axis, 010: +10
+ *   Y Axis -> 21-10 -> 2: pointer, 1: y axis, -10: -10
+ * 
 */
 
 #include <stdio.h> //printf
@@ -22,6 +31,38 @@ int main(int argc, char **argv){
 
 	int sock = 0; 
 	struct sockaddr_in serv_addr; 
+	char* server_address = "127.0.0.1";
+
+	int mode = 0;
+	int element = 0;
+	int val = 0;
+	char payload[6];
+	// Arguments Handling
+	for (int i = 1; i < argc; i++){
+		if((strcmp(argv[i], "-ip") == 0) || (strcmp(argv[i], "--ipaddress") == 0)){
+			server_address = argv[i+1];
+		}else if((strcmp(argv[i], "-k") == 0) || (strcmp(argv[i], "--keypress") == 0)){
+			mode = 3;
+			element = i;
+		}else if((strcmp(argv[i], "-pX") == 0) || (strcmp(argv[i], "--pointerX") == 0)){
+			mode = 2;
+			element = i;
+			val = 0;
+		}else if((strcmp(argv[i], "-pY") == 0) || (strcmp(argv[i], "--pointerY") == 0)){
+			mode = 2;
+			element = i;
+			val = 1;
+		}else if((strcmp(argv[i], "-h") == 0) || (strcmp(argv[i], "--help") == 0)){
+			printf("Virtual HID Socket Client\n"); 
+			printf("	Usage: client -k 115 \n"); 
+			printf("Available Commands: \n"); 
+			printf("	-ip / --ipaddress : Server ip address(Default: 127.0.0.1)");
+			printf("	-h / --help : Show help\n"); 
+			printf("	-k / --keypress [value]: Sends key press event over socket\n");
+			printf("	-pX / --pointerX: Sends X axis coordinates over socket\n"); 
+			printf("	-pY / --pointerY [value]: Sends Y axis coordinates over socket\n"); 
+		}
+	}
 
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){ 
 		printf("Socket creation error \n"); 
@@ -34,7 +75,7 @@ int main(int argc, char **argv){
 	serv_addr.sin_port = htons(PORT); 
 
 	// Convert IPv4 and IPv6 addresses from text to binary form 
-	if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0){ 
+	if(inet_pton(AF_INET, server_address, &serv_addr.sin_addr)<=0){ 
 		printf("\nInvalid address/ Address not supported \n"); 
 		exit(EXIT_FAILURE);  
 	} 
@@ -44,55 +85,11 @@ int main(int argc, char **argv){
 		exit(EXIT_FAILURE); 
 	}
 	
-	char mode = '0';
-	int element = 0;
-	// Arguments Handling
-	for (int i = 1; i < argc; i++){
-		if((strcmp(argv[i], "-k") == 0) || (strcmp(argv[i], "--keyboard") == 0)){
-			mode = '1';
-			element = i;
-		}else if((strcmp(argv[i], "-m") == 0) || (strcmp(argv[i], "--mouse") == 0)){
-			mode = '2';
-			element = i;
-		}else if((strcmp(argv[i], "-mb") == 0) || (strcmp(argv[i], "--mousebutton") == 0)){
-			mode = '3';
-			element = i;
-		}else if((strcmp(argv[i], "-h") == 0) || (strcmp(argv[i], "--help") == 0)){
-			printf("Virtual HID Socket Client\n"); 
-			printf("	Usage: client -k 115 \n"); 
-			printf("Available Commands: \n"); 
-			printf("	-h / --help : Show help\n"); 
-			printf("	-k / --keyboard [code]: Sends keyboard event over socket\n");
-			printf("	-m / --mouse [X] [Y]: Sends mouse pointer coordinates over socket\n"); 
-			printf("	-mb / --mousebutton [code]: Sends mouse button press over socket\n"); 
-		}
-	}
-
-	int arg_size = strlen(argv[element+1]);
-	char *payload = malloc(arg_size);
-	int payload_size = arg_size+1;
-	*(payload+0) = mode; // set payloads first element as a id
-	for(int i=0; i<arg_size; i++){
-		payload[i+1] = *(argv[element+1]+i);
-	}
-
-	if(mode=='2'){
-		int arg2_size = strlen(argv[element+2]);
-		payload_size = arg_size+arg2_size+2;
-		payload = realloc(payload, payload_size);
-
-		*(payload+arg_size+1) = ':';
-		for(int i=arg_size+2; i<=payload_size; i++){
-			payload[i] = *(argv[element+2]+i-arg_size-2);
-		}		
-	}
-
-	//printf("%s", payload);
-	send(sock , payload, payload_size, 0);
+	sprintf(payload, "%i%i%03d", mode, val, atoi(argv[element+1]));
+	send(sock , payload, 6, 0);
 
 	usleep(5);
 
 	close(sock);
-	free(payload);
 	return 0; 
 } 

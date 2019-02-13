@@ -18,21 +18,40 @@ PORT = 8080
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, PORT))
-time.sleep(0.2)
 
-sendVar = ''
+payload = ''
+mode = 0
+val = 0
+command_index = 0
+
 for index, arg in enumerate(sys.argv):
+    if arg in ['--ipaddress', '-ip']:
+        HOST = sys.argv[index+1]
     if arg in ['--keyboard', '-k']:
-        sendVar = sys.argv[index+1] + 'k'
+        mode = 3
+        command_index = index
+    if arg in ['--pointerX', '-pX']:
+        mode = 2
+        val = 0
+        command_index = index
+    if arg in ['--pointerY', '-pY']:
+        mode = 2
+        val = 1
+        command_index = index
     if arg in ['--help', '-h']:
         print("Virtual HID Socket Python Client") 
-        print("	Usage: client -k 115 ") 
+        print("	Usage: client -k 115 ")
         print("Available Commands: ")
-        print("	-h / --help : Show help")
-        print("	-k / --keyboard [code]: Sends keyboard event over socket") 
+        print(" -ip / --ipaddress : Server ip address(Default: 127.0.0.1)")
+        print("	-h / --help : Show help") 
+        print("	-k / --keyboard [value]: Sends keypress event over socket")
+        print("	-pX / --pointerX: Sends X axis coordinates over socket") 
+        print("	-pY / --pointerY [value]: Sends Y axis coordinates over socket")
 
 
-s.send(sendVar.encode())
+payload = str(mode) + str(val) + sys.argv[command_index+1]
+
+s.send(payload.encode())
 
 time.sleep(0.1)
 s.close()

@@ -22,6 +22,7 @@
 #include <stdlib.h> //exit
 #include <sys/socket.h>
 #include <linux/uinput.h>
+#include <netinet/tcp.h>
 
 #define PORT 8080 //Socket port
 
@@ -30,12 +31,24 @@ struct uinput_setup usetup;
 //Key events must be defined in keys[] before using
 int keys[] = {BTN_LEFT, BTN_RIGHT, KEY_VOLUMEUP, KEY_VOLUMEDOWN}; 
 
+//Socket
 int server_fd;
 int new_socket, valread;
 struct sockaddr_in address;
 int opt = 1;
 int addrlen = sizeof(address);
+char buffer[10];
 
+
+short mode;
+short ev_val;
+short neg;
+int incoming_code;
+
+void error_handle(char* msg){
+    perror(msg);
+    exit(EXIT_FAILURE); 
+}
 
 /*
  * Sends input events
@@ -51,6 +64,14 @@ void emit(int fd, int type, int code, int val){
     ie.time.tv_usec = 0;
 
     write(fd, &ie, sizeof(ie));
+}
+
+int socket_accept(){
+    if((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen))<0){
+        error_handle("accept");
+        return 0;
+    }
+    return 1;
 }
 
 int main(){
@@ -77,15 +98,13 @@ int main(){
     ioctl(fd, UI_DEV_CREATE);
         
     //Create socket file descriptor
-    if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-        perror("socket failed");
-        exit(EXIT_FAILURE);   
+    if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){  
+        error_handle("socket failed");
     }
 
     //Attach socket to the port 8080
-    if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
+    if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT | TCP_NODELAY | IPPROTO_TCP, &opt, sizeof(opt))){
+        error_handle("setsockopt");
     }
     
     address.sin_family = AF_INET;
@@ -94,65 +113,74 @@ int main(){
 
     //Bind
     if(bind(server_fd, (struct sockaddr *)&address, sizeof(address))<0){
-        perror("bind failed");
-        exit(EXIT_FAILURE);   
+        error_handle("bind");  
     }
 
     if(listen(server_fd, 3)<0){
-        perror("listen");
-        exit(EXIT_FAILURE);
+        error_handle("listen");
     }
 
-    if((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen))<0){
-        perror("accept");
-        exit(EXIT_FAILURE);
-    }
+    socket_accept();
 
     while(1){    
-        char buffer[1024] = {0};
-        valread = recv(new_socket, buffer, 1024, 0);
+        
+        valread = recv(new_socket, buffer, 10, 0);
 
         if(valread>0){
-            int buffer_len = strlen(buffer);
-        
-            printf("Received: %s Size: %i\n", buffer, buffer_len); //For debugging
+            printf("Received: %s Size: %i\n", buffer, 0); //For debugging
 
-            short mode = buffer[0]-'0'; //char to int
+            mode = buffer[0]-'0'; //char to int
             
             buffer[0] = '0'; //Making buffer '0' because atoi giving wrong value
-            int incoming_code = atoi(buffer); // char* to int for mode 1 
+            ev_val = buffer[1]-'0';
+            buffer[1] = '0';
+            neg = 0;
+            if(buffer[2] == '-'){
+                neg = 1;
+                buffer[2] = '0';
+            }
 
+            incoming_code = atoi(buffer); // char* to int for mode 1 
+            
             /*
-            * 1 - Keyboard
+            * 0 - Key Report
+            * 1 - Key Press - Any device
             * 2 - Mouse Pointer
-            * 3 - Mouse Buttons
+            * 
+            * Ex: 
+            *   Left Click Event -> 11272 -> 1:key press, 1: press val, 272: keycode
+            *   X Axis -> 20010 -> 2: pointer, 0: x axis, 010: +10
+            *   Y Axis -> 21-10 -> 2: pointer, 1: y axis, -10: -10
             */
             switch (mode){
                 case 0:
                     emit(fd, EV_SYN, SYN_REPORT, 0);
-                    usleep(5);
                 break;
-                case 1: 
+                case 1:
+                    emit(fd, EV_KEY, incoming_code, ev_val);
+                break;
+                case 2:
+                    if(neg){
+                        incoming_code = -incoming_code;
+                    }                      
+                    if(ev_val == 0){
+                        emit(fd, EV_REL, REL_X, incoming_code);
+                    }else if(ev_val == 1){
+                        emit(fd, EV_REL, REL_Y, incoming_code);
+                    }
+                break;
+                case 3:
                     emit(fd, EV_KEY, incoming_code, 1);
                     emit(fd, EV_SYN, SYN_REPORT, 0);
                     emit(fd, EV_KEY, incoming_code, 0);
-                    emit(fd, EV_SYN, SYN_REPORT, 0);
-                    usleep(5);
-                break;
-                case 2:         
-                    if(incoming_code == 0){
-                        emit(fd, EV_REL, REL_X, 1);
-                    }else if(incoming_code == 1){
-                        emit(fd, EV_REL, REL_Y, 1);
-                    }
-                    emit(fd, EV_SYN, SYN_REPORT, 0);
-                    usleep(5);
                 break;
             }
-            usleep(2);        
+            emit(fd, EV_SYN, SYN_REPORT, 0);
+            usleep(5);        
         }else{
-            new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
-        }        
+            socket_accept();
+        }  
+        usleep(10);      
     }
 
     sleep(1);

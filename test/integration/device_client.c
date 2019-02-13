@@ -5,11 +5,11 @@
  * 
  * This client sends real device events
 */
-#include <stdio.h> //printf
-#include <unistd.h> //usleep, close
-#include <stdlib.h> //exit
-#include <string.h> //strcmp, memset
-#include <arpa/inet.h> //inet_pton
+#include <stdio.h> 
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h> 
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/socket.h> 
 #include <linux/input.h>
@@ -26,6 +26,7 @@ int main(int argc, char* argv[]){
     //Socket
     int sock = 0; 
 	struct sockaddr_in serv_addr; 
+    char payload[5];
 
     //HID
     struct input_event ev[64];
@@ -40,8 +41,9 @@ int main(int argc, char* argv[]){
     fd_set fds;
     int maxfd;
 
-    device[0] = "/dev/input/event12";
-    device[1] = "/dev/input/event18";
+    //device[0] = "/dev/input/event21";
+    device[0] = argv[2];
+    //device[1] = "/dev/input/event18";
 
     for(int i = 0; i < 1; ++i){
         evdev = &evdevs[numevdevs];
@@ -79,7 +81,7 @@ int main(int argc, char* argv[]){
 	serv_addr.sin_port = htons(PORT); 
 
 	// Convert IPv4 and IPv6 addresses from text to binary form 
-	if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0){ 
+	if(inet_pton(AF_INET, argv[1], &serv_addr.sin_addr)<=0){ 
 		printf("\nInvalid address/ Address not supported \n"); 
 		exit(EXIT_FAILURE);  
 	} 
@@ -93,7 +95,6 @@ int main(int argc, char* argv[]){
 
         FD_ZERO(&fds);
         maxfd = -1;
-
         for(int i = 0; i < numevdevs; ++i){
             evdev = &evdevs[i];
             FD_SET(evdev->fd, &fds);
@@ -120,15 +121,18 @@ int main(int argc, char* argv[]){
             
             for(int j = 0; j < numevents; ++j){
                 printf ("%s: Type[%d] Code[%d] Value[%d]\n", evdev->device, ev[j].type, ev[j].code, ev[j].value);
+                if(ev[j].type != 0){
+                    if(ev[j].type == 2)
+                        sprintf(payload, "%d%d%03d", ev[j].type, ev[j].code, ev[j].value);
+                    else if(ev[j].type == 1)
+                        sprintf(payload, "%d%d%d", ev[j].type, ev[j].value, ev[j].code);
 
-                char payload[5];
-                sprintf(payload, "%d%d", ev[j].type, ev[j].code);
-
-                send(sock , payload, 5, 0);
-                usleep(5);
+                    send(sock , payload, 6, 0);
+                } 
             }
+            sleep(0);
         }
-        
+        usleep(10);
     }
     
     for(int i = 0; i < numevdevs; ++i){
