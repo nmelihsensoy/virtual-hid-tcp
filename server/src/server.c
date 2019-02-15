@@ -29,7 +29,7 @@
 struct uinput_setup usetup;
 
 //Key events must be defined in keys[] before using
-int keys[] = {BTN_LEFT, BTN_RIGHT, KEY_VOLUMEUP, KEY_VOLUMEDOWN}; 
+int keys[] = {BTN_LEFT, BTN_RIGHT}; 
 
 //Socket
 int server_fd;
@@ -77,12 +77,17 @@ int socket_accept(){
 int main(){
     int fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);  
 
-    //Key events init
+    //Custom key events init
     ioctl(fd, UI_SET_EVBIT, EV_KEY);
     for(int i=0; i<sizeof(keys)/sizeof(int); i++){
         ioctl(fd, UI_SET_KEYBIT, keys[i]);
     }
     
+    //Keyboard init
+    for(int i=0; i<227; i++){
+        ioctl(fd, UI_SET_KEYBIT, i);
+    }
+
     //Mouse Pointer events init
     ioctl(fd, UI_SET_EVBIT, EV_REL);
     ioctl(fd, UI_SET_RELBIT, REL_X);
